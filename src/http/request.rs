@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 use crate::http::method::Method;
 use crate::http::version::Version;
-
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Request {
