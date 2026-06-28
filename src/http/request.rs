@@ -10,3 +10,7 @@ pub struct Request {
     pub headers: HashMap<String, String>,
     pub body: Vec<u8>,
 }
+
+// impl Request {
+//     fn parse(input: &[u8]) -> Result<Self, ParseError>
+// }
