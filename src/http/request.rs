@@ -1,23 +1,7 @@
 use std::collections::HashMap;
+use crate::http::method::Method;
+use crate::http::version::Version;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Version {
-    Http10,
-    Http11,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Method {
-    Get,
-    Post,
-    Patch,
-    Put,
-    Delete,
-    Head,
-    Options,
-    Connect,
-    Trace,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Request {
