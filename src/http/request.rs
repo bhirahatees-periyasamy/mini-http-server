@@ -1,6 +1,6 @@
 use crate::http::method::Method;
 use crate::http::version::HttpVersion;
-use core::result::Result::Err;
+use core::result::Result::{self, Err, Ok};
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
@@ -14,9 +14,21 @@ pub struct Request {
     pub body: Vec<u8>,
 }
 
-impl Request {
+pub struct RequestLine<'a> {
+    pub method: &'a [u8],
+    pub path: &'a [u8],
+    pub version: &'a [u8],
+}
 
-    pub fn new(method: Method, path: String, version:HttpVersion, headers: HashMap<String, String>, body: Vec<u8>) -> Self {
+
+impl Request {
+    pub fn new(
+        method: Method,
+        path: String,
+        version: HttpVersion,
+        headers: HashMap<String, String>,
+        body: Vec<u8>,
+    ) -> Self {
         Request { method: method, path: path, version: version, headers: headers, body: body }
     }
 
@@ -43,20 +55,105 @@ impl Request {
             }
         }
 
-        println!("--- raw request ---\n{}", String::from_utf8_lossy(&data));
-
         let body = "Hello from mini-http-server";
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
             body.len(),
             body
         );
+
+        let request = Self::parse(data);
+
+        println!("Request: {:?}", request);
+
         stream.write_all(response.as_bytes())?;
         stream.flush()?;
         Ok(())
     }
 
-    // pub fn parse(self, data: Vec<u8>) -> Request {
+    fn parse_request_line<'a>(request_line: &'a[u8]) -> Result<RequestLine<'a>, io::Error> {
+        let request_line = request_line.strip_suffix(b"\r").unwrap_or(request_line);
+
+        let mut parts = request_line.split(|&byte| byte == b' ');
+
+        let method = parts
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Missing method name"))?;
+
+        let path = parts
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Missing path"))?;
+
+        let version = parts
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Missing HTTP version"))?;
+
+        Ok(RequestLine { method, path, version })
+    }
+
+    fn parse_headers<'a, I>(lines: I) -> Result<HashMap<String, String>, io::Error> 
+        where  I: Iterator<Item = &'a [u8]>,
+     {
+        let mut headers = HashMap::new();
+
+        for line in lines {
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+
+            if line.is_empty() {
+                continue;
+            }
+
+            let colon = line.iter().position(|&byte| byte == b':').ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "Missing Headers in request")
+            })?;
+
+            let name = &line[..colon];
+            let value = &line[colon + 1..];
+
+            let value = value.strip_prefix(&[b' ']).unwrap_or(value);
+
+            let name = String::from_utf8_lossy(name).to_string();
+            let value = String::from_utf8_lossy(value).to_string();
+
+            headers.insert(name, value);
+        }
+
+        Ok(headers)
+    }
+
+    pub fn parse(data: Vec<u8>) -> Result<Request, io::Error> {
+        let header_end = data
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid HTTP request"))?;
+
+        let header_section = &data[..header_end];
+        let body_start = header_end + 4;
+        let mut lines = header_section.split(|&byte| byte == b'\n');
+
         
-    // }
+        let request_line = lines
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Missing request line"))?;
+
+        let parsed_request_line = Request::parse_request_line(request_line)?;
+
+        let headers = Request::parse_headers(lines)?;
+
+        let body = data[body_start..].to_vec();
+
+        let method = Method::from_bytes(parsed_request_line.method)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid HTTP method"))?;
+
+        let version = HttpVersion::from_bytes(parsed_request_line.version)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid HTTP version"))?;
+
+        Ok(Request {
+            method: method,
+            path: String::from_utf8_lossy(parsed_request_line.path).to_string(),
+            version: version,
+            headers,
+            body,
+        })
+    }
 }
