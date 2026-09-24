@@ -1,21 +1,20 @@
 pub mod error;
 pub mod http;
+use std:: net::TcpListener;
+use crate::http::request::{Request};
 
-use std::{io::Read, net::TcpListener};
 
 fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:1234")?;
     for stream in listener.incoming() {
-        let mut stream = stream?;
-
-        println!("Client connected!");
-
-        let mut buffer = [0; 1024];
-        let bytes_read = stream.read(&mut buffer)?;
-
-        println!("Read {} bytes", bytes_read);
-
-        println!("{}", String::from_utf8_lossy(&buffer[..bytes_read]));
+        match stream {
+            Ok(stream) => {
+                if let Err(e) = Request::handle_client(stream){
+                    eprintln!("connection error:: {e}");
+                }
+            },
+            Err(e) => eprintln!("accept failed: {e}"),
+        }
     }
     Ok(())
 }
