@@ -1,5 +1,4 @@
-pub mod error;
-pub mod http;
+use mini_http::http;
 use std:: net::TcpListener;
 use crate::http::request::{Request};
 
